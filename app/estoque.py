@@ -18,6 +18,11 @@ class SaidaEstoque(BaseModel):
     nome: str = Field(..., min_length=1)
     quantidade: float = Field(..., gt=0)
 
+# Modelo para registrar entrada
+class EntradaEstoque(BaseModel):
+    nome: str = Field(..., min_length=1)
+    quantidade: float = Field(..., gt=0)
+
 
 # Banco temporário em memória
 produtos = []
@@ -40,6 +45,22 @@ def cadastrar_produto(produto: Produto):
     return {
         "mensagem": "Produto cadastrado com sucesso!",
         "produto": produto
+    }
+
+# Registrar entrada no estoque
+@router.post("/entrada")
+def registrar_entrada(entrada: EntradaEstoque):
+    for produto in produtos:
+        if produto.nome == entrada.nome:
+            produto.quantidade += entrada.quantidade
+
+            return {
+                "mensagem": "Entrada registrada com sucesso!",
+                "produto": produto
+            }
+
+    return {
+        "mensagem": "Produto não encontrado!"
     }
 
 
