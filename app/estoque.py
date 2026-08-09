@@ -51,7 +51,7 @@ def cadastrar_produto(produto: Produto):
 @router.post("/entrada")
 def registrar_entrada(entrada: EntradaEstoque):
     for produto in produtos:
-        if produto.nome == entrada.nome:
+        if produto.nome.lower() == entrada.nome.lower():
             produto.quantidade += entrada.quantidade
 
             return {
