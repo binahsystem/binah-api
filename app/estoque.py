@@ -1,28 +1,29 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
-
-router = APIRouter(
-    prefix="/estoque",
-    tags=["Estoque"]
-)
+from pydantic import BaseModel, Field
 
 
+router = APIRouter(prefix="/estoque", tags=["Estoque"])
+
+
+# Modelo de produto
 class Produto(BaseModel):
-    nome: str
-    quantidade: float
-    unidade: str
-    estoque_minimo: float
+    nome: str = Field(..., min_length=1)
+    quantidade: float = Field(..., ge=0)
+    unidade: str = Field(..., min_length=1)
+    estoque_minimo: float = Field(..., ge=0)
 
 
+# Modelo para registrar saída
 class SaidaEstoque(BaseModel):
-    nome: str
-    quantidade: float
+    nome: str = Field(..., min_length=1)
+    quantidade: float = Field(..., gt=0)
 
 
 # Banco temporário em memória
 produtos = []
 
 
+# Listar estoque
 @router.get("/")
 def listar_estoque():
     return {
@@ -31,6 +32,7 @@ def listar_estoque():
     }
 
 
+# Cadastrar produto
 @router.post("/")
 def cadastrar_produto(produto: Produto):
     produtos.append(produto)
@@ -41,13 +43,14 @@ def cadastrar_produto(produto: Produto):
     }
 
 
+# Registrar saída de produto
 @router.post("/saida")
 def registrar_saida(saida: SaidaEstoque):
 
     # Procurar o produto pelo nome
     for produto in produtos:
 
-        if produto.nome == saida.nome:
+        if produto.nome.lower() == saida.nome.lower():
 
             # Verificar se existe quantidade suficiente
             if saida.quantidade > produto.quantidade:
