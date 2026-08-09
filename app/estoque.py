@@ -7,6 +7,7 @@ router = APIRouter(prefix="/estoque", tags=["Estoque"])
 
 # Modelo de produto
 class Produto(BaseModel):
+    codigo: int | None = None
     nome: str = Field(..., min_length=1)
     quantidade: float = Field(..., ge=0)
     unidade: str = Field(..., min_length=1)
@@ -15,12 +16,14 @@ class Produto(BaseModel):
 
 # Modelo para registrar saída
 class SaidaEstoque(BaseModel):
-    nome: str = Field(..., min_length=1)
+    codigo: int | None = None
+    nome: str | None = None
     quantidade: float = Field(..., gt=0)
 
 # Modelo para registrar entrada
 class EntradaEstoque(BaseModel):
-    nome: str = Field(..., min_length=1)
+    codigo: int | None = None
+    nome: str | None = None
     quantidade: float = Field(..., gt=0)
 
 
@@ -40,6 +43,7 @@ def listar_estoque():
 # Cadastrar produto
 @router.post("/")
 def cadastrar_produto(produto: Produto):
+    produto.codigo = len(produtos) + 1
     produtos.append(produto)
 
     return {
@@ -51,7 +55,18 @@ def cadastrar_produto(produto: Produto):
 @router.post("/entrada")
 def registrar_entrada(entrada: EntradaEstoque):
     for produto in produtos:
-        if produto.nome.lower() == entrada.nome.lower():
+
+        # Procurar pelo código
+        if entrada.codigo is not None and produto.codigo == entrada.codigo:
+            produto.quantidade += entrada.quantidade
+
+            return {
+                "mensagem": "Entrada registrada com sucesso!",
+                "produto": produto
+            }
+
+        # Procurar pelo nome
+        if entrada.nome is not None and produto.nome.lower() == entrada.nome.lower():
             produto.quantidade += entrada.quantidade
 
             return {
@@ -68,44 +83,54 @@ def registrar_entrada(entrada: EntradaEstoque):
 @router.post("/saida")
 def registrar_saida(saida: SaidaEstoque):
 
-    # Procurar o produto pelo nome
+    # Procurar o produto pelo código ou pelo nome
     for produto in produtos:
 
-        if produto.nome.lower() == saida.nome.lower():
+        # Procurar pelo código
+        if saida.codigo is not None and produto.codigo == saida.codigo:
+            produto_encontrado = produto
+            break
 
-            # Verificar se existe quantidade suficiente
-            if saida.quantidade > produto.quantidade:
-                return {
-                    "mensagem": "Quantidade insuficiente em estoque!",
-                    "produto": produto,
-                    "estoque_baixo": False
-                }
+        # Procurar pelo nome
+        if saida.nome is not None and produto.nome.lower() == saida.nome.lower():
+            produto_encontrado = produto
+            break
 
-            # Retirar a quantidade
-            produto.quantidade -= saida.quantidade
+    else:
+        return {
+            "mensagem": "Produto não encontrado!",
+            "estoque_baixo": False
+        }
 
-            # Verificar se ficou abaixo do estoque mínimo
-            estoque_baixo = produto.quantidade < produto.estoque_minimo
+    # Verificar se existe quantidade suficiente
+    if saida.quantidade > produto_encontrado.quantidade:
+        return {
+            "mensagem": "Quantidade insuficiente em estoque!",
+            "produto": produto_encontrado,
+            "estoque_baixo": False
+        }
 
-            # Mensagem normal
-            mensagem = "Saída registrada com sucesso!"
+    # Retirar a quantidade
+    produto_encontrado.quantidade -= saida.quantidade
 
-            # Mensagem de alerta
-            if estoque_baixo:
-                mensagem = (
-                    f"⚠️ Estoque baixo! "
-                    f"O produto {produto.nome} está com apenas "
-                    f"{produto.quantidade} unidades."
-                )
+    # Verificar se ficou abaixo do estoque mínimo
+    estoque_baixo = (
+        produto_encontrado.quantidade < produto_encontrado.estoque_minimo
+    )
 
-            return {
-                "mensagem": mensagem,
-                "produto": produto,
-                "estoque_baixo": estoque_baixo
-            }
+    # Mensagem normal
+    mensagem = "Saída registrada com sucesso!"
 
-    # Produto não encontrado
+    # Mensagem de alerta
+    if estoque_baixo:
+        mensagem = (
+            f"⚠️ Estoque baixo! "
+            f"O produto {produto_encontrado.nome} está com apenas "
+            f"{produto_encontrado.quantidade} unidades."
+        )
+
     return {
-        "mensagem": "Produto não encontrado!",
-        "estoque_baixo": False
+        "mensagem": mensagem,
+        "produto": produto_encontrado,
+        "estoque_baixo": estoque_baixo
     }
