@@ -1,5 +1,5 @@
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, model_validator
 
 
 router = APIRouter(prefix="/estoque", tags=["Estoque"])
@@ -13,18 +13,58 @@ class Produto(BaseModel):
     unidade: str = Field(..., min_length=1)
     estoque_minimo: float = Field(..., ge=0)
 
+    @model_validator(mode="after")
+    def validar_produto(self):
+        self.nome = self.nome.strip()
+        self.unidade = self.unidade.strip()
+
+        if not self.nome:
+            raise ValueError("O nome do produto não pode estar vazio.")
+
+        if not self.unidade:
+            raise ValueError("A unidade do produto não pode estar vazia.")
+
+        return self
+
 
 # Modelo para registrar saída
 class SaidaEstoque(BaseModel):
-    codigo: int | None = None
-    nome: str | None = None
+    codigo: int | None = Field(default=None, gt=0)
+    nome: str | None = Field(default=None, min_length=1)
     quantidade: float = Field(..., gt=0)
+
+    @model_validator(mode="after")
+    def validar_produto(self):
+        if self.codigo is None and not self.nome:
+            raise ValueError("Informe o código ou o nome do produto.")
+
+        if self.nome is not None:
+            self.nome = self.nome.strip()
+
+            if not self.nome:
+                raise ValueError("O nome do produto não pode estar vazio.")
+
+        return self
+
 
 # Modelo para registrar entrada
 class EntradaEstoque(BaseModel):
-    codigo: int | None = None
-    nome: str | None = None
+    codigo: int | None = Field(default=None, gt=0)
+    nome: str | None = Field(default=None, min_length=1)
     quantidade: float = Field(..., gt=0)
+
+    @model_validator(mode="after")
+    def validar_produto(self):
+        if self.codigo is None and not self.nome:
+            raise ValueError("Informe o código ou o nome do produto.")
+
+        if self.nome is not None:
+            self.nome = self.nome.strip()
+
+            if not self.nome:
+                raise ValueError("O nome do produto não pode estar vazio.")
+
+        return self
 
 
 # Banco temporário em memória
@@ -41,8 +81,17 @@ def listar_estoque():
 
 
 # Cadastrar produto
-@router.post("/")
+@router.post("/", status_code=201)
 def cadastrar_produto(produto: Produto):
+
+    # Verificar se o produto já está cadastrado
+    for p in produtos:
+        if p.nome.lower() == produto.nome.lower():
+            raise HTTPException(
+                status_code=409,
+                detail="Produto já cadastrado!"
+            )
+
     produto.codigo = len(produtos) + 1
     produtos.append(produto)
 
@@ -50,6 +99,19 @@ def cadastrar_produto(produto: Produto):
         "mensagem": "Produto cadastrado com sucesso!",
         "produto": produto
     }
+
+# Consultar produto pelo código
+
+@router.get("/{codigo}")
+def consultar_produto(codigo: int):
+    for produto in produtos:
+        if produto.codigo == codigo:
+            return produto
+
+    raise HTTPException(
+        status_code=404,
+        detail="Produto não encontrado!"
+    )
 
 # Registrar entrada no estoque
 @router.post("/entrada")
@@ -74,41 +136,42 @@ def registrar_entrada(entrada: EntradaEstoque):
                 "produto": produto
             }
 
-    return {
-        "mensagem": "Produto não encontrado!"
-    }
+    raise HTTPException(
+        status_code=404,
+        detail="Produto não encontrado!"
+            )
 
 
 # Registrar saída de produto
 @router.post("/saida")
 def registrar_saida(saida: SaidaEstoque):
 
-    # Procurar o produto pelo código ou pelo nome
+     # Procurar o produto pelo código ou pelo nome
+    produto_encontrado = None
+
     for produto in produtos:
 
-        # Procurar pelo código
         if saida.codigo is not None and produto.codigo == saida.codigo:
             produto_encontrado = produto
             break
 
-        # Procurar pelo nome
         if saida.nome is not None and produto.nome.lower() == saida.nome.lower():
             produto_encontrado = produto
             break
 
-    else:
-        return {
-            "mensagem": "Produto não encontrado!",
-            "estoque_baixo": False
-        }
+    if produto_encontrado is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Produto não encontrado!"
+        )
 
     # Verificar se existe quantidade suficiente
     if saida.quantidade > produto_encontrado.quantidade:
-        return {
-            "mensagem": "Quantidade insuficiente em estoque!",
-            "produto": produto_encontrado,
-            "estoque_baixo": False
-        }
+        raise HTTPException(
+            status_code=400,
+            detail="Quantidade insuficiente em estoque!"
+        )
+
 
     # Retirar a quantidade
     produto_encontrado.quantidade -= saida.quantidade
