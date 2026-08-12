@@ -4,6 +4,7 @@ from typing import Literal
 
 from app.compras import pedidos
 from app.estoque import produtos
+from app.fiscal import notas_fiscais
 
 
 
@@ -27,6 +28,7 @@ recebimentos = []
 class Recebimento(BaseModel):
     codigo: int | None = None
     pedido_codigo: int = Field(..., gt=0)
+    nfe_codigo: int = Field(..., gt=0)
 
     observacao: str | None = None
 
@@ -64,6 +66,20 @@ def criar_recebimento(recebimento: Recebimento):
         raise HTTPException(
             status_code=404,
             detail="Pedido de compra não encontrado!"
+        )
+
+        # Verificar se a NF-e existe
+    nfe = None
+
+    for nota in notas_fiscais:
+        if nota.codigo == recebimento.nfe_codigo:
+            nfe = nota
+            break
+
+    if nfe is None:
+        raise HTTPException(
+            status_code=404,
+            detail="NF-e não encontrada!"
         )
 
     # Verificar se já existe recebimento para esse pedido
